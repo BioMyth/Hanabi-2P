@@ -25,7 +25,7 @@ private:
     Hand PartnersHand;
     vector<Card> LastHand;
     std::vector<Card> Discards;
-    std::vector<Card> seenCards;
+
     bool safeDiscards[NUM_COLORS][NUM_NUMBERS];
     std::vector<int> boardState;
 
@@ -48,6 +48,8 @@ private:
     //void updateHand();
     int savedByNumber(int checking);
     int savedByColor(int checking);
+    
+    void updateHand(Hand& h);
 };
 
 Player::Player()
@@ -63,16 +65,68 @@ Player::Player(const Player& p)
     memcpy(safeDiscards, p.safeDiscards, NUM_COLORS * NUM_NUMBERS);
 
     Discards = p.Discards;
-    seenCards = p.seenCards;
     hintsLeft = p.hintsLeft;
     LastHand = p.LastHand;
 }
+
+Event* Player::ask()
+{
+    /* You must produce an event of the appropriate type. Not all member
+    variables of a given event type need to be filled in; some will be
+    ignored even if they are. Summary follows.
+    Options:
+    ColorHintEvent - you must declare a color; no other member variables
+    necessary.
+    NumberHintEvent - you must declare a number; no other member variables
+    necessary.
+    PlayEvent - you must declare the index to be played; no other member
+    variables necessary.
+    DiscardEvent - you must declare the index to be discarded; no other
+    member variables necessary.
+    */
+    // Get most Playable card (determined by ???)
+    PassingData bestPlay = getBestPlay();
+
+    PassingData bestDiscard = getBestDiscard();
+
+
+    if (bestPlay.value > .90) {
+        return new PlayEvent(bestPlay.index);
+    }
+    if (hintsLeft > 4) {
+        Event* tmp = getBestHint();
+        ColorHintEvent* CHE = static_cast<ColorHintEvent*>(tmp);
+        NumberHintEvent* NHE = static_cast<NumberHintEvent*>(tmp);
+
+        if (CHE != nullptr)
+            handleColorHintEvent(CHE, PartnersHand);
+
+        if (NHE != nullptr)
+            handleNumberHintEvent(NHE, PartnersHand);
+        return tmp;
+    }
+
+    if (hintsLeft > 1) {
+        Event* tmp = getBestHint();
+        ColorHintEvent* CHE = static_cast<ColorHintEvent*>(tmp);
+        NumberHintEvent* NHE = static_cast<NumberHintEvent*>(tmp);
+
+        if (CHE != nullptr)
+            handleColorHintEvent(CHE, PartnersHand);
+
+        if (NHE != nullptr)
+            handleNumberHintEvent(NHE, PartnersHand);
+        return tmp;
+    }
+    return new DiscardEvent(bestDiscard.index);
+}
+
 
 void Player::tell(Event* e, vector<int> board, int hints, int fuses, vector<Card> oHand, int deckSize)
 {
     hintsLeft = hints;
     LastHand = oHand;
-    boardState = vector<int>(board);
+    boardState = board;
     /* Possible kinds of event:
         DiscardEvent - can be for us or other player
             c - the card discarded
@@ -109,32 +163,47 @@ void Player::tell(Event* e, vector<int> board, int hints, int fuses, vector<Card
     }
 }
 
+void Player::updateHand(Hand& h) {
+    for (int color = 0; color < NUM_COLORS; color++) {
+        for (int numbers = 0; numbers < NUM_NUMBERS; numbers++) {
+            if (numCardRemaining(color, numbers) == 0) {
+
+            }
+        }
+    }
+}
+
+void pushCardsBack(Hand& h, int fromIndex) {
+    for (int i = fromIndex; i < HAND_SIZE - 1; i++) {
+        memcpy(h.cards[i].possibleCards, h.cards[i + 1].possibleCards, NUM_COLORS * NUM_NUMBERS);
+        //h.cards[i] = h.cards[i + 1];
+    }
+    h.cards[HAND_SIZE - 1].Reset();
+}
 
 void Player::handleDiscardEvent(DiscardEvent *event) {
     Discards.push_back(event->c);
-    seenCards.push_back(event->c);
     if (event->wasItThisPlayer) {
-        MyHand.cards[event->position].Reset();
+        pushCardsBack(MyHand, event->position);
     }
     else {
-        PartnersHand.cards[event->position].Reset();
+        pushCardsBack(PartnersHand, event->position);
     }
 }
 
 void Player::handlePlayEvent(PlayEvent *event) {
     Discards.push_back(event->c);
-    seenCards.push_back(event->c);
     if (event->wasItThisPlayer) {
-        MyHand.cards[event->position].Reset();
+        pushCardsBack(MyHand, event->position);
     }
     else {
-        PartnersHand.cards[event->position].Reset();
+        pushCardsBack(PartnersHand, event->position);
     }
 }
 
 void Player::handleColorHintEvent(ColorHintEvent *event, Hand& h) {
     for (int i = 0; i < HAND_SIZE; i++) {
-        if (LastHand[i].color == event->color) {
+        if (find(event->indices.begin(), event->indices.end(), i) != event->indices.end()) {
             for (int color = 0; color < NUM_COLORS; color++) {
                 for (int number = 0; number < NUM_NUMBERS; number++) {
                     if (color != event->color)
@@ -151,7 +220,7 @@ void Player::handleColorHintEvent(ColorHintEvent *event, Hand& h) {
 }
 void Player::handleNumberHintEvent(NumberHintEvent *event, Hand& h) {
     for (int i = 0; i < HAND_SIZE; i++) {
-        if (LastHand[i].number == event->number) {
+        if (find(event->indices.begin(), event->indices.end(), i) != event->indices.end()) {
             for (int color = 0; color < NUM_COLORS; color++) {
                 for (int number = 0; number < NUM_NUMBERS; number++) {
                     if (number != event->number)
@@ -169,57 +238,6 @@ void Player::handleNumberHintEvent(NumberHintEvent *event, Hand& h) {
 
 
 
-Event* Player::ask()
-{
-    /* You must produce an event of the appropriate type. Not all member
-        variables of a given event type need to be filled in; some will be
-        ignored even if they are. Summary follows.
-    Options:
-        ColorHintEvent - you must declare a color; no other member variables
-            necessary.
-        NumberHintEvent - you must declare a number; no other member variables
-            necessary.
-        PlayEvent - you must declare the index to be played; no other member
-            variables necessary.
-        DiscardEvent - you must declare the index to be discarded; no other
-            member variables necessary.
-    */
-    // Get most Playable card (determined by ???)
-    PassingData bestPlay = getBestPlay();
-    
-    PassingData bestDiscard = getBestDiscard();
-
-
-    if (bestPlay.value > .90) {
-        return new PlayEvent(bestPlay.index + 1);
-    }
-    if (hintsLeft > 4) {
-        Event* tmp = getBestHint();
-        ColorHintEvent* CHE = static_cast<ColorHintEvent*>(tmp);
-        NumberHintEvent* NHE = static_cast<NumberHintEvent*>(tmp);
-
-        if (CHE != nullptr)
-            handleColorHintEvent(CHE, PartnersHand);
-
-        if (NHE != nullptr)
-            handleNumberHintEvent(NHE, PartnersHand);
-        return tmp;
-    }
-
-    if (hintsLeft > 1) {
-        Event* tmp = getBestHint();
-        ColorHintEvent* CHE = static_cast<ColorHintEvent*>(tmp);
-        NumberHintEvent* NHE = static_cast<NumberHintEvent*>(tmp);
-
-        if (CHE != nullptr)
-            handleColorHintEvent(CHE, PartnersHand);
-
-        if (NHE != nullptr)
-            handleNumberHintEvent(NHE, PartnersHand);
-        return tmp;
-    }
-    return new DiscardEvent(bestDiscard.index);
-}
 
 PassingData Player::getBestPlay() {
     PassingData ret(0, getPlayability(MyHand.cards[0]));
@@ -286,7 +304,9 @@ float Player::getDiscardability(HCard& card) {
 
 int Player::numCardRemaining(int color, int number) {
     int numInDeck = 4;
-    for (auto iter = seenCards.begin(); iter != seenCards.end(); iter++) {
+    vector<Card> tmp = Discards;
+    tmp.insert(tmp.end(), LastHand.begin(), LastHand.end());
+    for (auto iter = tmp.begin(); iter != tmp.end(); iter++) {
         if (iter->color == color && iter->number == number)
             numInDeck--;
     }
