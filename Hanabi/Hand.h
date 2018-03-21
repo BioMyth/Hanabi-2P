@@ -19,3 +19,11 @@ class Hand {
 public:
     HCard cards[HAND_SIZE];
 };
+
+struct PassingData {
+    PassingData(int index, float value) :index(index), value(value) {}
+    PassingData() :index(0), value(0) {};
+
+    int index;
+    float value;
+};
