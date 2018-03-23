@@ -108,7 +108,7 @@ Event* Player::ask()
     DiscardEvent - you must declare the index to be discarded; no other
     member variables necessary.
     */
-    // Get most Playable card (determined by ???)
+
     PassingData bestPlay = getBestPlay();
 
     PassingData bestDiscard = getBestDiscard();
@@ -119,13 +119,11 @@ Event* Player::ask()
     if (hintsLeft == 0)
         return new DiscardEvent(bestDiscard.index);
 
-    if (bestPlay.value > (.6 + ((3 - fusesLeft) * .1)))
+    if (bestPlay.value > (.7 + ((3 - fusesLeft) * .1)))
         return new PlayEvent(bestPlay.index);
 
-    if (bestDiscard.value < .01)
-        return new DiscardEvent(bestDiscard.index);
 
-    if (hintsLeft > 4 && bestDiscard.value > .01) {
+    if (hintsLeft > 4 ) {
         Event* ret = getBestHintCard();
         if (ret == nullptr)
             ret = getBestHintInformation();
@@ -133,7 +131,7 @@ Event* Player::ask()
         return ret;
     }
 
-    if (bestPlay.value > (.5 + (3 - fusesLeft) * .2)) {
+    if (bestPlay.value > (.6 + (3 - fusesLeft) * .15)) {
         return new PlayEvent(bestPlay.index);
     }
 
@@ -146,7 +144,6 @@ Event* Player::ask()
     }
     return new DiscardEvent(bestDiscard.index);
 }
-
 
 void Player::tell(Event* e, vector<int> board, int hints, int fuses, vector<Card> oHand, int deckSize)
 {
