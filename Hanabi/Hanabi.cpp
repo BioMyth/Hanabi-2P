@@ -9,7 +9,7 @@ int main()
 {
 	int total = 0;
 	// Set to false if you don't want a "chatty" game
-	Game g(true);
+	Game g(false);
 	// Will be 1000 for final test.
 	int iterations = 1000;
 	for (int i = 0; i < iterations; i++)

@@ -112,16 +112,17 @@ Event* Player::ask()
 
     PassingData bestDiscard = getBestDiscard();
 
-    if (bestPlay.value > .95) {
+    if (bestPlay.value > .9)
         return new PlayEvent(bestPlay.index);
-    }
-    if (hintsLeft == 0) {
-        return new DiscardEvent(bestDiscard.index);
-    }
 
-    if (bestPlay.value > (.6 + ((2 - fusesLeft) * .15))) {
+    if (hintsLeft == 0)
+        return new DiscardEvent(bestDiscard.index);
+
+    if (bestPlay.value > (.6 + ((3 - fusesLeft) * .1)))
         return new PlayEvent(bestPlay.index);
-    }
+
+    if (bestDiscard.value < .01)
+        return new DiscardEvent(bestDiscard.index);
 
     if (hintsLeft > 4 && bestDiscard.value > .01) {
         Event* ret = getBestHintCard();
@@ -131,7 +132,7 @@ Event* Player::ask()
         return ret;
     }
 
-    if (bestPlay.value > (.5 + (2 - fusesLeft) * .25)) {
+    if (bestPlay.value > (.5 + (3 - fusesLeft) * .2)) {
         return new PlayEvent(bestPlay.index);
     }
 
@@ -191,9 +192,11 @@ void Player::tell(Event* e, vector<int> board, int hints, int fuses, vector<Card
 
 void Player::updateHand(Hand& h) {
     for (int color = 0; color < NUM_COLORS; color++) {
-        for (int numbers = 0; numbers < NUM_NUMBERS; numbers++) {
-            if (numCardRemaining(color, numbers) == 0) {
-
+        for (int number = 0; number < NUM_NUMBERS; number++) {
+            if (numCardRemaining(color, number) == 0) {
+                for (int card = 0; card < HAND_SIZE; card++) {
+                    h.cards[card].possibleCards[color][number] = false;
+                }
             }
         }
     }
@@ -214,6 +217,8 @@ void Player::handleDiscardEvent(DiscardEvent *event) {
     else {
         pushCardsBack(PartnersHand, event->position);
     }
+    updateHand(MyHand);
+    updateHand(PartnersHand);
 }
 
 void Player::handlePlayEvent(PlayEvent *event) {
@@ -224,6 +229,8 @@ void Player::handlePlayEvent(PlayEvent *event) {
     else {
         pushCardsBack(PartnersHand, event->position);
     }
+    updateHand(MyHand);
+    updateHand(PartnersHand);
 }
 
 void Player::handleColorHintEvent(ColorHintEvent *event, Hand& h) {
@@ -314,16 +321,18 @@ float Player::getDiscardability(HCard& card) {
     float playability = getPlayability(card);
     for (size_t color = 0; color < NUM_COLORS; color++) {
         for (size_t number = 0; number < NUM_NUMBERS; number++) {
-            float numCardLeft = numCardRemaining(color, number);
-            possibleCards += numCardLeft;
-            if (safeDiscards[color][number])
-                continue;
-            // Chance to be card
-            float c = (4 - numCardLeft);
-            // Value of this card(importance to keep)
-            float v = safeDiscards[color][number] ? 0 : ((5 - numCardLeft) /*+ playability*/);
-            sum += c * v;
-        }
+            //if (card.possibleCards[color][number]) {
+                float numCardLeft = numCardRemaining(color, number);
+                possibleCards += numCardLeft;
+                if (safeDiscards[color][number])
+                    continue;
+                // Chance to be card
+                //float c = (4 - numCardLeft);
+                // Value of this card(importance to keep)
+                float v = safeDiscards[color][number] ? 0 : ((5 - numCardLeft));// +playability);
+                sum += v;//c * v;
+            }
+        //}
     }
     return sum / possibleCards;
 }
