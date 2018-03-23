@@ -20,16 +20,8 @@ public:
     Player(const Player& p);
     void tell(Event* e, vector<int> board, int hints, int fuses, vector<Card> oHand, int deckSize);
     Event* ask();
+#pragma region pFunc
 private:
-    Hand MyHand;
-    Hand PartnersHand;
-    std::vector<Card> LastHand;
-    std::vector<Card> Discards;
-
-    bool safeDiscards[NUM_COLORS][NUM_NUMBERS];
-    std::vector<int> boardState;
-
-    int hintsLeft;
 
     PassingData getBestDiscard();
     PassingData getBestPlay();
@@ -50,23 +42,54 @@ private:
     int savedByColor(int checking);
     
     void updateHand(Hand& h);
+#pragma endregion
+private:
+    Hand MyHand;
+    Hand PartnersHand;
+    std::vector<Card> LastHand;
+    std::vector<Card> Discards;
+
+    bool safeDiscards[NUM_COLORS][NUM_NUMBERS];
+    std::vector<int> boardState;
+
+    int hintsLeft;
+    int fusesLeft;
 };
 
 Player::Player()
 {
-    memset(safeDiscards, false, NUM_COLORS * NUM_NUMBERS);
+    for (int color = 0; color < NUM_COLORS; color++) {
+        for (int number = 0; number < NUM_NUMBERS; number++) {
+            safeDiscards[color][number] = false;
+        }
+    }
     hintsLeft = MAX_HINTS;
+    fusesLeft = 3;
 }
 
 Player::Player(const Player& p)
 {
-    memcpy(MyHand.cards, p.MyHand.cards, NUM_COLORS * NUM_NUMBERS);
-    memcpy(PartnersHand.cards, p.PartnersHand.cards, NUM_COLORS * NUM_NUMBERS);
-    memcpy(safeDiscards, p.safeDiscards, NUM_COLORS * NUM_NUMBERS);
+
+    for (int i = 0; i < HAND_SIZE; i++) {
+        for (int color = 0; color < NUM_COLORS; color++) {
+            for (int number = 0; number < NUM_NUMBERS; number++) {
+                MyHand.cards[i].possibleCards[color][number] = p.MyHand.cards[i].possibleCards[color][number];
+                PartnersHand.cards[i].possibleCards[color][number] = p.PartnersHand.cards[i].possibleCards[color][number];
+            }
+        }
+    }
+    for (int color = 0; color < NUM_COLORS; color++) {
+        for (int number = 0; number < NUM_NUMBERS; number++) {
+            safeDiscards[color][number] = p.safeDiscards[color][number];
+        }
+    }
+
+    boardState = p.boardState;
 
     Discards = p.Discards;
     hintsLeft = p.hintsLeft;
     LastHand = p.LastHand;
+    fusesLeft = p.fusesLeft;
 }
 
 Event* Player::ask()
@@ -89,34 +112,35 @@ Event* Player::ask()
 
     PassingData bestDiscard = getBestDiscard();
 
-
-    if (bestPlay.value > .90) {
+    if (bestPlay.value > .95) {
         return new PlayEvent(bestPlay.index);
     }
-    if (hintsLeft > 4) {
-        Event* tmp = getBestHint();
-        ColorHintEvent* CHE = static_cast<ColorHintEvent*>(tmp);
-        NumberHintEvent* NHE = static_cast<NumberHintEvent*>(tmp);
+    if (hintsLeft == 0) {
+        return new DiscardEvent(bestDiscard.index);
+    }
 
-        if (CHE != nullptr)
-            handleColorHintEvent(CHE, PartnersHand);
+    if (bestPlay.value > (.6 + ((2 - fusesLeft) * .15))) {
+        return new PlayEvent(bestPlay.index);
+    }
 
-        if (NHE != nullptr)
-            handleNumberHintEvent(NHE, PartnersHand);
-        return tmp;
+    if (hintsLeft > 4 && bestDiscard.value > .01) {
+        Event* ret = getBestHintCard();
+        if (ret == nullptr)
+            ret = getBestHintInformation();
+
+        return ret;
+    }
+
+    if (bestPlay.value > (.5 + (2 - fusesLeft) * .25)) {
+        return new PlayEvent(bestPlay.index);
     }
 
     if (hintsLeft > 1) {
-        Event* tmp = getBestHint();
-        ColorHintEvent* CHE = static_cast<ColorHintEvent*>(tmp);
-        NumberHintEvent* NHE = static_cast<NumberHintEvent*>(tmp);
+        Event* ret = getBestHintCard();
+        if (ret == nullptr)
+            ret = getBestHintInformation();
 
-        if (CHE != nullptr)
-            handleColorHintEvent(CHE, PartnersHand);
-
-        if (NHE != nullptr)
-            handleNumberHintEvent(NHE, PartnersHand);
-        return tmp;
+        return ret;
     }
     return new DiscardEvent(bestDiscard.index);
 }
@@ -128,6 +152,7 @@ void Player::tell(Event* e, vector<int> board, int hints, int fuses, vector<Card
     LastHand = vector<Card>(oHand); // This is the line that is actually failing!!!
     boardState = board;
     hintsLeft = hints;
+    fusesLeft = fuses;
     /* Possible kinds of event:
         DiscardEvent - can be for us or other player
             c - the card discarded
@@ -176,8 +201,7 @@ void Player::updateHand(Hand& h) {
 
 void pushCardsBack(Hand& h, int fromIndex) {
     for (int i = fromIndex; i < HAND_SIZE - 1; i++) {
-        memcpy(h.cards[i].possibleCards, h.cards[i + 1].possibleCards, NUM_COLORS * NUM_NUMBERS);
-        //h.cards[i] = h.cards[i + 1];
+        h.cards[i] = h.cards[i + 1];
     }
     h.cards[HAND_SIZE - 1].Reset();
 }
@@ -287,6 +311,7 @@ PassingData Player::getBestDiscard() {
 float Player::getDiscardability(HCard& card) {
     float sum = 0;
     float possibleCards = 0;
+    float playability = getPlayability(card);
     for (size_t color = 0; color < NUM_COLORS; color++) {
         for (size_t number = 0; number < NUM_NUMBERS; number++) {
             float numCardLeft = numCardRemaining(color, number);
@@ -294,9 +319,9 @@ float Player::getDiscardability(HCard& card) {
             if (safeDiscards[color][number])
                 continue;
             // Chance to be card
-            float c = (4- numCardLeft);//(numCardLeft / 4) / static_cast<float>((NUM_COLORS * NUM_NUMBERS * 4) - seenCards.size());
+            float c = (4 - numCardLeft);
             // Value of this card(importance to keep)
-            float v = safeDiscards[color][number] ? 0 : (5 - numCardLeft);
+            float v = safeDiscards[color][number] ? 0 : ((5 - numCardLeft) /*+ playability*/);
             sum += c * v;
         }
     }
@@ -315,36 +340,35 @@ int Player::numCardRemaining(int color, int number) {
 }
 
 Event* Player::getBestHint() {
-    Event* ret = getBestHintCard();
-    if (ret == nullptr)
-        ret = getBestHintInformation();
+    //Event* ret = getBestHintCard();
+    //if (ret == nullptr)
+    Event* ret = getBestHintInformation();
 
     return ret;
+    //return new NumberHintEvent(vector<int>(), LastHand.size() > 0 ? LastHand[0].number : 0);
 }
 
-Event* Player::getBestHintInformation() {
-    PassingData bestNumber(0, -1);
-    PassingData bestColor(0, -1);
-    for (int i = 0; i < LastHand.size(); i++) {
+Event* Player::getBestHintInformation() { // His fault partially
+    PassingData bestNumber(0, savedByNumber(LastHand[0].number));
+    PassingData bestColor(0, savedByColor(LastHand[0].color));
+    for (size_t i = 1; i < LastHand.size(); i++) {
         int number = savedByNumber(LastHand[i].number);
         if (number > bestNumber.value) {
-            bestNumber.index = LastHand[i].number;
+            bestNumber.index = i;
             bestNumber.value = number;
         }
 
-
         int color = savedByColor(LastHand[i].color);
         if (color > bestColor.value) {
-            bestColor.index = LastHand[i].color;
+            bestColor.index = i;
             bestColor.value = color;
         }
 
     }
-
     if (bestColor.value > bestNumber.value)
-        return new ColorHintEvent(vector<int>(), bestColor.index);
+        return new ColorHintEvent(vector<int>(), LastHand[bestColor.index].color);
     else
-        return new NumberHintEvent(vector<int>(), bestNumber.index);
+        return new NumberHintEvent(vector<int>(), LastHand[bestNumber.index].number);
 }
 
 Event* Player::getBestHintCard() {
@@ -357,29 +381,28 @@ Event* Player::getBestHintCard() {
     if (viableCards.size() < 1)
         return nullptr;
 
-    int bestNumber = 0, bestNumberVal = -1;
-    int bestColor = 0, bestColorVal = -1;
+    PassingData bestNumber(0, savedByNumber(LastHand[0].number));
+    PassingData bestColor(0, savedByColor(LastHand[0].color));
     for (auto iter = viableCards.begin(); iter != viableCards.end(); iter++) {
-        int number = savedByNumber(LastHand[*iter].number);
-        if (number > bestNumberVal) {
-            bestNumber = LastHand[*iter].number;
-            bestNumberVal = number;
+        int number = savedByNumber(LastHand[(*iter)].number);
+        if (number > bestNumber.value) {
+            bestNumber.index = (*iter);
+            bestNumber.value = number;
         }
 
-
-        int color = savedByColor(LastHand[*iter].color);
-        if (color > bestColorVal) {
-            bestColor = LastHand[*iter].color;
-            bestColorVal = color;
+        int color = savedByColor(LastHand[(*iter)].color);
+        if (color > bestColor.value) {
+            bestColor.index = (*iter);
+            bestColor.value = color;
         }
 
     }
-    if (bestColorVal == 0 && bestNumberVal == 0)
+    if (bestColor.value == 0 && bestNumber.value == 0)
         return nullptr;
-    if (bestColorVal > bestNumberVal)
-        return new ColorHintEvent(vector<int>(), bestColor);
+    if (bestColor.value > bestNumber.value)
+        return new ColorHintEvent(vector<int>(), LastHand[bestColor.index].color);
     else
-        return new NumberHintEvent(vector<int>(), bestNumber);
+        return new NumberHintEvent(vector<int>(), LastHand[bestNumber.index].number);
 }
 
 int Player::savedByNumber(int checking) {
@@ -397,7 +420,7 @@ int Player::savedByNumber(int checking) {
 
 int Player::savedByColor(int checking) {
     int ret = 0;
-    for (int j = 0; j < HAND_SIZE; j++) {
+    for (int j = 0; j < HAND_SIZE && j < LastHand.size(); j++) {
         for (int number = 0; number < NUM_NUMBERS; number++) {
             ret += (PartnersHand.cards[j].possibleCards[checking][number] && LastHand[j].color != checking);
             for (int color = 0; color < NUM_COLORS; color++) {
@@ -407,4 +430,5 @@ int Player::savedByColor(int checking) {
     }
     return ret;
 }
+
 #endif

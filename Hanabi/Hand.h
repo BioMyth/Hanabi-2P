@@ -4,13 +4,25 @@
 
 struct HCard {
     HCard() {
-        memset(possibleCards, true, NUM_COLORS * NUM_NUMBERS);
+        for (int color = 0; color < NUM_COLORS; color++) {
+            for (int number = 0; number < NUM_NUMBERS; number++) {
+                possibleCards[color][number] = true;
+            }
+        }
     }
     HCard(HCard& toCopy) {
-        memcpy(possibleCards, toCopy.possibleCards, NUM_COLORS * NUM_NUMBERS);
+        for (int color = 0; color < NUM_COLORS; color++) {
+            for (int number = 0; number < NUM_NUMBERS; number++) {
+                possibleCards[color][number] = toCopy.possibleCards[color][number];
+            }
+        }
     }
     void Reset() {
-        memset(possibleCards, true, NUM_COLORS * NUM_NUMBERS);
+        for (int color = 0; color < NUM_COLORS; color++) {
+            for (int number = 0; number < NUM_NUMBERS; number++) {
+                possibleCards[color][number] = true;
+            }
+        }
     }
     bool possibleCards[NUM_COLORS][NUM_NUMBERS];
 };
