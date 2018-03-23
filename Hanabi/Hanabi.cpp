@@ -11,14 +11,14 @@ int main()
 	// Set to false if you don't want a "chatty" game
 	Game g(true);
 	// Will be 1000 for final test.
-	int iterations = 1;
-	//for (int i = 0; i < iterations; i++)
-	//{
+	int iterations = 1000;
+	for (int i = 0; i < iterations; i++)
+	{
 		Player p1;
 		Player p2;
 		g.setup(p1, p2);
 		total += g.gameLoop();
-	//}
+	}
 	cout << "Average score " << total/(static_cast<double>(iterations)) 
 		<< "." << endl;
     std::cin.get();

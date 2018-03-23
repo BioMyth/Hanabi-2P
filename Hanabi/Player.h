@@ -23,7 +23,7 @@ public:
 private:
     Hand MyHand;
     Hand PartnersHand;
-    vector<Card> LastHand;
+    std::vector<Card> LastHand;
     std::vector<Card> Discards;
 
     bool safeDiscards[NUM_COLORS][NUM_NUMBERS];
@@ -124,9 +124,10 @@ Event* Player::ask()
 
 void Player::tell(Event* e, vector<int> board, int hints, int fuses, vector<Card> oHand, int deckSize)
 {
-    hintsLeft = hints;
-    LastHand = oHand;
+
+    LastHand = vector<Card>(oHand); // This is the line that is actually failing!!!
     boardState = board;
+    hintsLeft = hints;
     /* Possible kinds of event:
         DiscardEvent - can be for us or other player
             c - the card discarded
@@ -383,7 +384,7 @@ Event* Player::getBestHintCard() {
 
 int Player::savedByNumber(int checking) {
     int ret = 0;
-    for (int j = 0; j < HAND_SIZE; j++) {
+    for (int j = 0; j < HAND_SIZE && j < LastHand.size(); j++) {
         for (int color = 0; color < NUM_COLORS; color++) {
             ret += (PartnersHand.cards[j].possibleCards[color][checking] && LastHand[j].number != checking);
             for (int number = 0; number < NUM_NUMBERS; number++) {
