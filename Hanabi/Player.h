@@ -29,8 +29,8 @@ private:
     
     void handleDiscardEvent(DiscardEvent *event);
     void handlePlayEvent(PlayEvent *event);
-    void handleColorHintEvent(ColorHintEvent *event, Hand& h);
-    void handleNumberHintEvent(NumberHintEvent *event, Hand& h);
+    void handleColorHintEvent(ColorHintEvent *event, HCard (&h)[5]);
+    void handleNumberHintEvent(NumberHintEvent *event, HCard (&h)[5]);
     float getPlayability(HCard& card);
 
     Event* getBestHintInformation();
@@ -38,12 +38,12 @@ private:
     int savedByNumber(int checking);
     int savedByColor(int checking);
     
-    void updateHand(Hand& h);
+    void updateHand(HCard (&h)[5]);
 #pragma endregion
 private:
     int cardsRemaining[NUM_COLORS][NUM_NUMBERS];
-    Hand MyHand;
-    Hand PartnersHand;
+    HCard MyHand[5];
+    HCard PartnersHand[5];
     std::vector<Card> LastHand;
     std::vector<Card> Discards;
 
@@ -73,8 +73,8 @@ Player::Player(const Player& p)
     for (int i = 0; i < HAND_SIZE; i++) {
         for (int color = 0; color < NUM_COLORS; color++) {
             for (int number = 0; number < NUM_NUMBERS; number++) {
-                MyHand.cards[i].possibleCards[color][number] = p.MyHand.cards[i].possibleCards[color][number];
-                PartnersHand.cards[i].possibleCards[color][number] = p.PartnersHand.cards[i].possibleCards[color][number];
+                MyHand[i].possibleCards[color][number] = p.MyHand[i].possibleCards[color][number];
+                PartnersHand[i].possibleCards[color][number] = p.PartnersHand[i].possibleCards[color][number];
             }
         }
     }
@@ -189,23 +189,23 @@ void Player::tell(Event* e, vector<int> board, int hints, int fuses, vector<Card
     }
 }
 
-void Player::updateHand(Hand& h) {
+void Player::updateHand(HCard (&h)[5]) {
     for (int color = 0; color < NUM_COLORS; color++) {
         for (int number = 0; number < NUM_NUMBERS; number++) {
             if (cardsRemaining[color][number] == 0) {
                 for (int card = 0; card < HAND_SIZE; card++) {
-                    h.cards[card].possibleCards[color][number] = false;
+                    h[card].possibleCards[color][number] = false;
                 }
             }
         }
     }
 }
 
-void pushCardsBack(Hand& h, int fromIndex) {
+void pushCardsBack(HCard (&h)[5], int fromIndex) {
     for (int i = fromIndex; i < HAND_SIZE - 1; i++) {
-        h.cards[i] = h.cards[i + 1];
+        h[i] = h[i + 1];
     }
-    h.cards[HAND_SIZE - 1].Reset();
+    h[HAND_SIZE - 1].Reset();
 }
 
 void Player::handleDiscardEvent(DiscardEvent *event) {
@@ -237,46 +237,46 @@ void Player::handlePlayEvent(PlayEvent *event) {
     updateHand(PartnersHand);
 }
 
-void Player::handleColorHintEvent(ColorHintEvent *event, Hand& h) {
+void Player::handleColorHintEvent(ColorHintEvent *event, HCard (&h)[5]) {
     for (int i = 0; i < HAND_SIZE; i++) {
         if (find(event->indices.begin(), event->indices.end(), i) != event->indices.end()) {
             for (int color = 0; color < NUM_COLORS; color++) {
                 for (int number = 0; number < NUM_NUMBERS; number++) {
                     if (color != event->color)
-                        h.cards[i].possibleCards[color][number] = false;
+                        h[i].possibleCards[color][number] = false;
                 }
             }
         }
         else {
             for (int number = 0; number < NUM_NUMBERS; number++) {
-                h.cards[i].possibleCards[event->color][number] = false;
+                h[i].possibleCards[event->color][number] = false;
             }
         }
     }
 }
 
-void Player::handleNumberHintEvent(NumberHintEvent *event, Hand& h) {
+void Player::handleNumberHintEvent(NumberHintEvent *event, HCard (&h)[5]) {
     for (int i = 0; i < HAND_SIZE; i++) {
         if (find(event->indices.begin(), event->indices.end(), i) != event->indices.end()) {
             for (int color = 0; color < NUM_COLORS; color++) {
                 for (int number = 0; number < NUM_NUMBERS; number++) {
                     if (number != event->number)
-                        h.cards[i].possibleCards[color][number] = false;
+                        h[i].possibleCards[color][number] = false;
                 }
             }
         }
         else {
             for (int color = 0; color < NUM_COLORS; color++) {
-                h.cards[i].possibleCards[color][event->number] = false;
+                h[i].possibleCards[color][event->number] = false;
             }
         }
     }
 }
 
 PassingData Player::getBestPlay() {
-    PassingData ret(0, getPlayability(MyHand.cards[0]));
+    PassingData ret(0, getPlayability(MyHand[0]));
     for (int i = 1; i < HAND_SIZE; i++) {
-        float currentValue = getPlayability(MyHand.cards[i]);
+        float currentValue = getPlayability(MyHand[i]);
         if (currentValue > ret.value) {
             ret.index = i;
             ret.value = currentValue;
@@ -302,9 +302,9 @@ float Player::getPlayability(HCard& card) {
 }
 
 PassingData Player::getBestDiscard() {
-    PassingData ret(0, getDiscardability(MyHand.cards[0]));
+    PassingData ret(0, getDiscardability(MyHand[0]));
     for (size_t index = 1; index < HAND_SIZE; index++) {
-        float indexDiscardability = getDiscardability(MyHand.cards[index]);
+        float indexDiscardability = getDiscardability(MyHand[index]);
         if (indexDiscardability < ret.value) {
             ret.index = index;
             ret.value = indexDiscardability;
@@ -396,9 +396,9 @@ int Player::savedByNumber(int checking) {
     int ret = 0;
     for (int j = 0; j < HAND_SIZE && j < LastHand.size(); j++) {
         for (int color = 0; color < NUM_COLORS; color++) {
-            ret += (PartnersHand.cards[j].possibleCards[color][checking] && LastHand[j].number != checking);
+            ret += (PartnersHand[j].possibleCards[color][checking] && LastHand[j].number != checking);
             for (int number = 0; number < NUM_NUMBERS; number++) {
-                ret += (number != checking && PartnersHand.cards[j].possibleCards[color][number] && LastHand[j].number == checking);
+                ret += (number != checking && PartnersHand[j].possibleCards[color][number] && LastHand[j].number == checking);
             }
         }
     }
@@ -409,9 +409,9 @@ int Player::savedByColor(int checking) {
     int ret = 0;
     for (int j = 0; j < HAND_SIZE && j < LastHand.size(); j++) {
         for (int number = 0; number < NUM_NUMBERS; number++) {
-            ret += (PartnersHand.cards[j].possibleCards[checking][number] && LastHand[j].color != checking);
+            ret += (PartnersHand[j].possibleCards[checking][number] && LastHand[j].color != checking);
             for (int color = 0; color < NUM_COLORS; color++) {
-                ret += (color != checking && PartnersHand.cards[j].possibleCards[color][number] && LastHand[j].color == checking);
+                ret += (color != checking && PartnersHand[j].possibleCards[color][number] && LastHand[j].color == checking);
             }
         }
     }
